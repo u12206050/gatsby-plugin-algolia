@@ -2,6 +2,10 @@ const algoliasearch = require('algoliasearch');
 const chunk = require('lodash.chunk');
 const report = require('gatsby-cli/lib/reporter');
 
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+
 /**
  * give back the same thing as this was called with.
  *
@@ -16,6 +20,31 @@ exports.onPostBuild = async function(
   const activity = report.activityTimer(`index to Algolia`);
   activity.start();
   const client = algoliasearch(appId, apiKey);
+
+  /* Check hashes and changes */
+  const HashFile = path.resolve('./.cache/algolia-index.json')
+  let aIndex = {}
+  const newIndex = {}
+  const indexes = {}
+  if (fs.existsSync(HashFile)) {
+    let rawdata = fs.readFileSync(HashFile);
+    aIndex = JSON.parse(rawdata);
+  }
+
+  setStatus(activity, `Loaded algolia hash index ${Object.keys(aIndex).length}`);
+
+  const hashObject = (queryIndex, obj) => {
+    let hash = crypto.createHash(`md5`).update(JSON.stringify(obj)).digest(`hex`);
+    let oldHash = aIndex[queryIndex] && aIndex[queryIndex][obj.id]
+    /* Save key and hash of object */
+    if (!newIndex[queryIndex]) newIndex[queryIndex] = {}
+    newIndex[queryIndex][obj.id] = hash;
+    /* Remove existing hash so we can cleanup (deleted objects) afterwards */
+    aIndex[queryIndex] && delete(aIndex[queryIndex][obj.id]);
+
+    /* Object is new or has changed if */
+    return oldHash !== hash
+  }
 
   setStatus(activity, `${queries.length} queries to index`);
 
@@ -32,6 +61,7 @@ exports.onPostBuild = async function(
     const mainIndexExists = await indexExists(index);
     const tmpIndex = client.initIndex(`${indexName}_tmp`);
     const indexToUse = mainIndexExists ? tmpIndex : index;
+    indexes[indexName] = indexToUse
 
     if (mainIndexExists) {
       setStatus(activity, `query ${i}: copying existing index`);
@@ -44,14 +74,33 @@ exports.onPostBuild = async function(
       report.panic(`failed to index to Algolia`, result.errors);
     }
     const objects = transformer(result);
-    const chunks = chunk(objects, chunkSize);
+
+    setStatus(activity, `query ${i}: Checking what has changed`);
+
+    const hasChanged = objects.filter(obj => hashObject(`${indexName}-${i}`, obj));
+    setStatus(activity, `query ${i}: Changed: ${hasChanged.length}, Total: ${objects.length}`);
+
+    const chunks = chunk(hasChanged, chunkSize);
 
     setStatus(activity, `query ${i}: splitting in ${chunks.length} jobs`);
 
+    /* Add changed / new objects */
     const chunkJobs = chunks.map(async function(chunked) {
       const { taskID } = await indexToUse.addObjects(chunked);
       return indexToUse.waitTask(taskID);
     });
+
+    /* Remove deleted objects */
+    const isRemoved = aIndex[i] && Object.keys(aIndex[i]);
+    const removeOldObjects = async function(objectIds) {
+      const { taskID } = await indexToUse.deleteObjects(objectIds);
+      return indexToUse.waitTask(taskID);
+    }
+
+    if (isRemoved && isRemoved.length) {
+      setStatus(activity, `query ${i}: Removed ${isRemoved.length}`);
+      chunkJobs.push(removeOldObjects(isRemoved));
+    }
 
     await Promise.all(chunkJobs);
 
@@ -67,6 +116,8 @@ exports.onPostBuild = async function(
 
   try {
     await Promise.all(jobs);
+    /* Save hashes back to file */
+    fs.writeFileSync(HashFile, JSON.stringify(newIndex));
   } catch (err) {
     report.panic(`failed to index to Algolia`, err);
   }
