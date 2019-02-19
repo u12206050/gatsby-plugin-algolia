@@ -77,6 +77,19 @@ module.exports = {
 };
 ```
 
+# Caching
+
+Stores a json file in Gatsby's `.cache` folder called `algolia-index.json` with the `id` and hash of each object that gets synced to Algolia. On consequent builds it will only update and delete the changes instead of reindexing everything.
+
+This saves the amount of operations used in Algolia.
+
+Supports multiple queries and different indexes.
+
+Make sure your objects have one of the following unique identifiers, either `id` or `objectID` without it the hash table can't build.
+
+**Note**: When using on Netlify, also install [gatsby-plugin-netlify-cache](https://www.gatsbyjs.org/packages/gatsby-plugin-netlify-cache/?=file) so the cache file will persist between builds.
+
+
 # Feedback
 
 This is the very first version of our plugin and isn't yet officially supported. Please leave all your feedback in GitHub issues 😊
