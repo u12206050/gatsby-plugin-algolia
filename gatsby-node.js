@@ -34,16 +34,22 @@ exports.onPostBuild = async function(
   setStatus(activity, `Loaded algolia hash index ${Object.keys(aIndex).length}`);
 
   const hashObject = (queryIndex, obj) => {
-    let hash = crypto.createHash(`md5`).update(JSON.stringify(obj)).digest(`hex`);
-    let oldHash = aIndex[queryIndex] && aIndex[queryIndex][obj.id]
+    const ID = obj.id || obj.objectID;
+    // Doesn't help if there isn't a unique identifier
+    if (!ID) return false;
+
+    const hash = crypto.createHash(`md5`).update(JSON.stringify(obj)).digest(`hex`);
+    const oldHash = aIndex[queryIndex] && aIndex[queryIndex][ID];
+    
     /* Save key and hash of object */
-    if (!newIndex[queryIndex]) newIndex[queryIndex] = {}
-    newIndex[queryIndex][obj.id] = hash;
+    if (!newIndex[queryIndex]) newIndex[queryIndex] = {};
+    newIndex[queryIndex][ID] = hash;
+    
     /* Remove existing hash so we can cleanup (deleted objects) afterwards */
-    aIndex[queryIndex] && delete(aIndex[queryIndex][obj.id]);
+    aIndex[queryIndex] && delete(aIndex[queryIndex][ID]);
 
     /* Object is new or has changed if */
-    return oldHash !== hash
+    return oldHash !== hash;
   }
 
   setStatus(activity, `${queries.length} queries to index`);
