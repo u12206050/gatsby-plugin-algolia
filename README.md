@@ -71,7 +71,7 @@ module.exports = {
         indexName: process.env.ALGOLIA_INDEX_NAME, // for all queries
         queries,
         chunkSize: 10000, // (optional) default: 1000
-        enableCaching: true, // (optional) default: false
+        enableCache: true, // (optional) default: false
       },
     },
   ],
@@ -80,7 +80,7 @@ module.exports = {
 
 # Caching
 
-Enable by setting `enableCaching` to `true`
+Enable by setting `enableCache` to `true`
 
 Stores a json file in Gatsby's `.cache` folder called `algolia-index.json` with the `id` and hash of each object that gets synced to Algolia. On consequent builds it will only update and delete the changes instead of reindexing everything.
 
