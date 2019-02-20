@@ -15,7 +15,7 @@ const identity = obj => obj;
 
 exports.onPostBuild = async function(
   { graphql },
-  { appId, apiKey, queries, indexName: mainIndexName, chunkSize = 1000, enableCaching = false }
+  { appId, apiKey, queries, indexName: mainIndexName, chunkSize = 1000, enableCache = false }
 ) {
   const activity = report.activityTimer(`index to Algolia`);
   activity.start();
@@ -26,7 +26,7 @@ exports.onPostBuild = async function(
   let aIndex = {}
   const newIndex = {}
   const indexes = {}
-  if (enableCaching && fs.existsSync(HashFile)) {
+  if (enableCache && fs.existsSync(HashFile)) {
     let rawdata = fs.readFileSync(HashFile);
     aIndex = JSON.parse(rawdata);
 
@@ -90,7 +90,7 @@ exports.onPostBuild = async function(
     }
 
     let hasChanged = objects;
-    if (enableCaching) {
+    if (enableCache) {
       hasChanged = objects.filter(obj => hashObject(`${indexName}-${i}`, obj));
       setStatus(activity, `query ${i}: Caching Status [Changed: ${hasChanged.length}, Total: ${objects.length}]`);
     }
@@ -105,7 +105,7 @@ exports.onPostBuild = async function(
       return indexToUse.waitTask(taskID);
     });
 
-    if (enableCaching) {
+    if (enableCache) {
       /* Remove deleted objects */
       const isRemoved = aIndex[i] && Object.keys(aIndex[i]);
       const removeOldObjects = async function(objectIds) {
@@ -133,7 +133,7 @@ exports.onPostBuild = async function(
 
   try {
     await Promise.all(jobs);
-    if (enableCaching) {
+    if (enableCache) {
       /* Save hashes back to file */
       fs.writeFileSync(HashFile, JSON.stringify(newIndex));
     }
