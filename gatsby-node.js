@@ -22,12 +22,12 @@ exports.onPostBuild = async function(
   const client = algoliasearch(appId, apiKey);
 
   /* Check hashes and changes */
-  const HashFile = path.resolve('./.cache/algolia-index.json')
+  const hashFile = path.resolve('./.cache/algolia-index.json')
   let aIndex = {}
   const newIndex = {}
   const indexes = {}
-  if (enableCache && fs.existsSync(HashFile)) {
-    let rawdata = fs.readFileSync(HashFile);
+  if (enableCache && fs.existsSync(hashFile)) {
+    let rawdata = fs.readFileSync(hashFile);
     aIndex = JSON.parse(rawdata);
 
     setStatus(activity, `Loaded algolia cache; has ${Object.keys(aIndex).length} indexes`);
@@ -135,7 +135,7 @@ exports.onPostBuild = async function(
     await Promise.all(jobs);
     if (enableCache) {
       /* Save hashes back to file */
-      fs.writeFileSync(HashFile, JSON.stringify(newIndex));
+      fs.writeFileSync(hashFile, JSON.stringify(newIndex));
     }
   } catch (err) {
     report.panic(`failed to index to Algolia`, err);
