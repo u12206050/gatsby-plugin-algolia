@@ -15,7 +15,7 @@ const identity = obj => obj;
 
 exports.onPostBuild = async function(
   { graphql },
-  { appId, apiKey, queries, indexName: mainIndexName, chunkSize = 1000 }
+  { appId, apiKey, queries, indexName: mainIndexName, chunkSize = 1000, enableCaching = false }
 ) {
   const activity = report.activityTimer(`index to Algolia`);
   activity.start();
@@ -26,25 +26,25 @@ exports.onPostBuild = async function(
   let aIndex = {}
   const newIndex = {}
   const indexes = {}
-  if (fs.existsSync(HashFile)) {
+  if (enableCaching && fs.existsSync(HashFile)) {
     let rawdata = fs.readFileSync(HashFile);
     aIndex = JSON.parse(rawdata);
+
+    setStatus(activity, `Loaded algolia cache; has ${Object.keys(aIndex).length} indexes`);
   }
 
-  setStatus(activity, `Loaded algolia hash index ${Object.keys(aIndex).length}`);
 
   const hashObject = (queryIndex, obj) => {
-    const ID = obj.id || obj.objectID;
-    // Doesn't help if there isn't a unique identifier
-    if (!ID) return false;
+    // Must have objectID
+    const ID = obj.objectID;
 
     const hash = crypto.createHash(`md5`).update(JSON.stringify(obj)).digest(`hex`);
     const oldHash = aIndex[queryIndex] && aIndex[queryIndex][ID];
-    
+
     /* Save key and hash of object */
     if (!newIndex[queryIndex]) newIndex[queryIndex] = {};
     newIndex[queryIndex][ID] = hash;
-    
+
     /* Remove existing hash so we can cleanup (deleted objects) afterwards */
     aIndex[queryIndex] && delete(aIndex[queryIndex][ID]);
 
@@ -83,8 +83,17 @@ exports.onPostBuild = async function(
 
     setStatus(activity, `query ${i}: Checking what has changed`);
 
-    const hasChanged = objects.filter(obj => hashObject(`${indexName}-${i}`, obj));
-    setStatus(activity, `query ${i}: Changed: ${hasChanged.length}, Total: ${objects.length}`);
+    if (objects.length > 0 && !objects[0].objectID) {
+      report.panic(
+        `failed to index to Algolia. Query results do not have 'objectID' key`
+      );
+    }
+
+    let hasChanged = objects;
+    if (enableCaching) {
+      hasChanged = objects.filter(obj => hashObject(`${indexName}-${i}`, obj));
+      setStatus(activity, `query ${i}: Caching Status [Changed: ${hasChanged.length}, Total: ${objects.length}]`);
+    }
 
     const chunks = chunk(hasChanged, chunkSize);
 
@@ -96,16 +105,18 @@ exports.onPostBuild = async function(
       return indexToUse.waitTask(taskID);
     });
 
-    /* Remove deleted objects */
-    const isRemoved = aIndex[i] && Object.keys(aIndex[i]);
-    const removeOldObjects = async function(objectIds) {
-      const { taskID } = await indexToUse.deleteObjects(objectIds);
-      return indexToUse.waitTask(taskID);
-    }
+    if (enableCaching) {
+      /* Remove deleted objects */
+      const isRemoved = aIndex[i] && Object.keys(aIndex[i]);
+      const removeOldObjects = async function(objectIds) {
+        const { taskID } = await indexToUse.deleteObjects(objectIds);
+        return indexToUse.waitTask(taskID);
+      }
 
-    if (isRemoved && isRemoved.length) {
-      setStatus(activity, `query ${i}: Removed ${isRemoved.length}`);
-      chunkJobs.push(removeOldObjects(isRemoved));
+      if (isRemoved && isRemoved.length) {
+        setStatus(activity, `query ${i}: Removed ${isRemoved.length}`);
+        chunkJobs.push(removeOldObjects(isRemoved));
+      }
     }
 
     await Promise.all(chunkJobs);
@@ -122,8 +133,10 @@ exports.onPostBuild = async function(
 
   try {
     await Promise.all(jobs);
-    /* Save hashes back to file */
-    fs.writeFileSync(HashFile, JSON.stringify(newIndex));
+    if (enableCaching) {
+      /* Save hashes back to file */
+      fs.writeFileSync(HashFile, JSON.stringify(newIndex));
+    }
   } catch (err) {
     report.panic(`failed to index to Algolia`, err);
   }
