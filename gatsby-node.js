@@ -3,7 +3,6 @@ const chunk = require('lodash.chunk');
 const report = require('gatsby-cli/lib/reporter');
 
 const crypto = require('crypto');
-const fs = require('fs');
 const path = require('path');
 
 /**
@@ -14,7 +13,7 @@ const path = require('path');
 const identity = obj => obj;
 
 exports.onPostBuild = async function(
-  { graphql },
+  { cache, graphql },
   { appId, apiKey, queries, indexName: mainIndexName, chunkSize = 1000, enableCache = false }
 ) {
   const activity = report.activityTimer(`index to Algolia`);
@@ -22,31 +21,33 @@ exports.onPostBuild = async function(
   const client = algoliasearch(appId, apiKey);
 
   /* Check hashes and changes */
-  const hashFile = path.resolve('./.cache/algolia-index.json')
-  let aIndex = {}
+  const hashCacheKey = 'algolia-hash-cache'
+  let curIndex = {}
   const newIndex = {}
   const indexes = {}
-  if (enableCache && fs.existsSync(hashFile)) {
-    let rawdata = fs.readFileSync(hashFile);
-    aIndex = JSON.parse(rawdata);
 
-    setStatus(activity, `Loaded algolia cache; has ${Object.keys(aIndex).length} indexes`);
+  if (enableCache) {
+    const hashCacheData = await cache.get(hashCacheKey);
+    if (hashCacheData) {
+      curIndex = JSON.parse(hashCacheData);
+    }
+
+    setStatus(activity, `Loaded algolia cache; has ${Object.keys(curIndex).length} indexes`);
   }
-
 
   const hashObject = (queryIndex, obj) => {
     // Must have objectID
     const ID = obj.objectID;
 
     const hash = crypto.createHash(`md5`).update(JSON.stringify(obj)).digest(`hex`);
-    const oldHash = aIndex[queryIndex] && aIndex[queryIndex][ID];
+    const oldHash = curIndex[queryIndex] && curIndex[queryIndex][ID];
 
     /* Save key and hash of object */
     if (!newIndex[queryIndex]) newIndex[queryIndex] = {};
     newIndex[queryIndex][ID] = hash;
 
     /* Remove existing hash so we can cleanup (deleted objects) afterwards */
-    aIndex[queryIndex] && delete(aIndex[queryIndex][ID]);
+    curIndex[queryIndex] && delete(curIndex[queryIndex][ID]);
 
     /* Object is new or has changed if */
     return oldHash !== hash;
@@ -100,14 +101,14 @@ exports.onPostBuild = async function(
     setStatus(activity, `query ${i}: splitting in ${chunks.length} jobs`);
 
     /* Add changed / new objects */
-    const chunkJobs = chunks.map(async function(chunked) {
+    const chunkJobs = [] /*chunks.map(async function(chunked) {
       const { taskID } = await indexToUse.addObjects(chunked);
       return indexToUse.waitTask(taskID);
-    });
+    });*/
 
     if (enableCache) {
       /* Remove deleted objects */
-      const isRemoved = aIndex[i] && Object.keys(aIndex[i]);
+      const isRemoved = curIndex[i] && Object.keys(curIndex[i]);
       const removeOldObjects = async function(objectIds) {
         const { taskID } = await indexToUse.deleteObjects(objectIds);
         return indexToUse.waitTask(taskID);
@@ -115,7 +116,7 @@ exports.onPostBuild = async function(
 
       if (isRemoved && isRemoved.length) {
         setStatus(activity, `query ${i}: Removed ${isRemoved.length}`);
-        chunkJobs.push(removeOldObjects(isRemoved));
+        //chunkJobs.push(removeOldObjects(isRemoved));
       }
     }
 
@@ -135,7 +136,9 @@ exports.onPostBuild = async function(
     await Promise.all(jobs);
     if (enableCache) {
       /* Save hashes back to file */
-      fs.writeFileSync(hashFile, JSON.stringify(newIndex));
+      setStatus(activity, `Saving algolia cache...`);
+      await cache.set(hashCacheKey, JSON.stringify(newIndex));
+      setStatus(activity, `Saved algolia cache`);
     }
   } catch (err) {
     report.panic(`failed to index to Algolia`, err);
