@@ -29,7 +29,7 @@ exports.onPostBuild = async function(
   if (enableCache) {
     const hashCacheData = await cache.get(hashCacheKey);
     if (hashCacheData) {
-      curIndex = JSON.parse(hashCacheData);
+      curIndex = hashCacheData;
     }
 
     setStatus(activity, `Loaded algolia cache; has ${Object.keys(curIndex).length} indexes`);
@@ -101,10 +101,10 @@ exports.onPostBuild = async function(
     setStatus(activity, `query ${i}: splitting in ${chunks.length} jobs`);
 
     /* Add changed / new objects */
-    const chunkJobs = [] /*chunks.map(async function(chunked) {
+    const chunkJobs = chunks.map(async function(chunked) {
       const { taskID } = await indexToUse.addObjects(chunked);
       return indexToUse.waitTask(taskID);
-    });*/
+    });
 
     if (enableCache) {
       /* Remove deleted objects */
@@ -116,7 +116,7 @@ exports.onPostBuild = async function(
 
       if (isRemoved && isRemoved.length) {
         setStatus(activity, `query ${i}: Removed ${isRemoved.length}`);
-        //chunkJobs.push(removeOldObjects(isRemoved));
+        chunkJobs.push(removeOldObjects(isRemoved));
       }
     }
 
@@ -137,7 +137,7 @@ exports.onPostBuild = async function(
     if (enableCache) {
       /* Save hashes back to file */
       setStatus(activity, `Saving algolia cache...`);
-      await cache.set(hashCacheKey, JSON.stringify(newIndex));
+      await cache.set(hashCacheKey, newIndex);
       setStatus(activity, `Saved algolia cache`);
     }
   } catch (err) {
