@@ -1,5 +1,5 @@
 {
-  "name": "@u12206050/gatsby-plugin-algolia",
+  "name": "gatsby-plugin-algolia-search",
   "version": "0.4.0",
   "keywords": [
     "gatsby",
@@ -9,10 +9,14 @@
     "gatsby-plugin"
   ],
   "homepage": "https://github.com/u12206050/gatsby-plugin-algolia/blob/master/README.md",
-  "repository": "u12206050/gatsby-plugin-algolia",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/u12206050/gatsby-plugin-algolia"
+  },
   "license": "Apache-2.0",
-  "author": "Algolia",
-  "description": "A gatsby plugin to push to Algolia based on a certain query",
+  "author": "Gerard Lamusse",
+  "forked": "https://github.com/algolia/gatsby-plugin-algolia",
+  "description": "A gatsby plugin to push to Algolia based on a certain query with support for partial updates",
   "dependencies": {
     "algoliasearch": "^3.24.5",
     "gatsby-cli": "^1.1.58",
