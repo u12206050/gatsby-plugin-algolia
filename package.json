@@ -1,6 +1,6 @@
 {
   "name": "gatsby-plugin-algolia",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "keywords": [
     "gatsby",
     "search",
@@ -8,7 +8,7 @@
     "algolia",
     "gatsby-plugin"
   ],
-  "repository": "algolia/gatsby-plugin-algolia",
+  "repository": "u12206050/gatsby-plugin-algolia",
   "license": "Apache-2.0",
   "author": "Algolia",
   "description": "A gatsby plugin to push to Algolia based on a certain query",

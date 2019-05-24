@@ -1,8 +1,6 @@
 # Gatsby plugin Algolia
 
-> This plugin is in _beta_ and not officially supported yet
->
-> Feel free to open issues for any questions or ideas
+**with support for Partial Updates**
 
 You can specify a list of queries to run and how to transform them into an array of objects to index. When you run `gatsby build`, it will publish those to Algolia.
 
@@ -104,7 +102,3 @@ This saves a lot of Algolia operations since you don't reindex everything on eve
 
 You can also specify `matchFields` per query to check for different fields based on the type of objects you are indexing.
 
-
-# Feedback
-
-This is the very first version of our plugin and isn't yet officially supported. Please leave all your feedback in GitHub issues 😊
