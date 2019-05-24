@@ -1,5 +1,5 @@
 {
-  "name": "gatsby-plugin-algolia",
+  "name": "@u12206050/gatsby-plugin-algolia",
   "version": "0.4.0",
   "keywords": [
     "gatsby",
@@ -8,6 +8,7 @@
     "algolia",
     "gatsby-plugin"
   ],
+  "homepage": "https://github.com/u12206050/gatsby-plugin-algolia/blob/master/README.md",
   "repository": "u12206050/gatsby-plugin-algolia",
   "license": "Apache-2.0",
   "author": "Algolia",
