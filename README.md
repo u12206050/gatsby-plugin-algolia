@@ -7,7 +7,7 @@ You can specify a list of queries to run and how to transform them into an array
 Here we have an example with some data that might not be very relevant, but will work with the default configuration of `gatsby new`
 
 ```sh
-$ npm install --save gatsby-plugin-algolia
+$ npm install --save gatsby-plugin-algolia-search
 ```
 
 First add credentials to a .env file, which you won't commit. If you track this in your file, and especially if the site is open source, you will leak your admin API key. This would mean anyone is able to change anything on your Algolia index.
@@ -63,7 +63,7 @@ const queries = [
 module.exports = {
   plugins: [
     {
-      resolve: `gatsby-plugin-algolia`,
+      resolve: `gatsby-plugin-algolia-search`,
       options: {
         appId: process.env.ALGOLIA_APP_ID,
         apiKey: process.env.ALGOLIA_API_KEY,
@@ -86,7 +86,7 @@ module.exports = {
 By default all records will be reindexed on every build. To enable only indexing the new, changed and deleted records include the following in the options of the plugin:
 
 ```js
-  resolve: `gatsby-plugin-algolia`,
+  resolve: `gatsby-plugin-algolia-search`,
   options: {
     /* ... */
     enablePartialUpdates: true,
