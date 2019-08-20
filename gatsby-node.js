@@ -1,6 +1,6 @@
 const algoliasearch = require('algoliasearch');
 const chunk = require('lodash.chunk');
-const report = require('gatsby-cli/lib/reporter');
+const Activity = require('./activity');
 
 /**
  * give back the same thing as this was called with.
@@ -36,12 +36,12 @@ exports.onPostBuild = async function(
   { graphql },
   { appId, apiKey, queries, indexName: mainIndexName, chunkSize = 1000, enablePartialUpdates = false, matchFields: mainMatchFields = ['modified'] }
 ) {
-  const activity = report.activityTimer(`index to Algolia`);
+  const activity = new Activity('Algolia Plugin');
   activity.start();
 
   const client = algoliasearch(appId, apiKey);
 
-  setStatus(activity, `${queries.length} queries to index`);
+  activity.report(`${queries.length} queries to index`);
 
   const indexState = {}
 
@@ -79,7 +79,7 @@ exports.onPostBuild = async function(
     }
     const currentIndexState = indexState[indexName]
 
-    setStatus(activity, `query ${i}: executing query`);
+    activity.report(`query ${i}: executing query`);
     const result = await graphql(query);
     if (result.errors) {
       report.panic(`failed to index to Algolia`, result.errors);
@@ -92,17 +92,17 @@ exports.onPostBuild = async function(
       );
     }
 
-    setStatus(activity, `query ${i}: graphql resulted in ${Object.keys(objects).length} records`);
+    activity.report(`query ${i}: graphql resulted in ${Object.keys(objects).length} records`);
 
     let hasChanged = objects;
     let algoliaObjects = {}
     if (enablePartialUpdates) {
-      setStatus(activity, `query ${i}: starting Partial updates`);
+      activity.report(`query ${i}: starting Partial updates`);
 
       algoliaObjects = await fetchAlgoliaObjects(indexToUse, matchFields);
 
       const results = Object.keys(algoliaObjects).length
-      setStatus(activity, `query ${i}: found ${results} existing records`);
+      activity.report(`query ${i}: found ${results} existing records`);
 
       if (results) {
         hasChanged = objects.filter(curObj => {
@@ -121,12 +121,12 @@ exports.onPostBuild = async function(
         Object.keys(algoliaObjects).forEach(({ objectID }) => currentIndexState.toRemove[objectID] = true)
       }
 
-      setStatus(activity, `query ${i}: Partial updates – [insert/update: ${hasChanged.length}, total: ${objects.length}]`);
+      activity.report(`query ${i}: Partial updates – [insert/update: ${hasChanged.length}, total: ${objects.length}]`);
     }
 
     const chunks = chunk(hasChanged, chunkSize);
 
-    setStatus(activity, `query ${i}: splitting in ${chunks.length} jobs`);
+    activity.report(`query ${i}: splitting in ${chunks.length} jobs`);
 
     /* Add changed / new objects */
     const chunkJobs = chunks.map(async function(chunked) {
@@ -141,7 +141,7 @@ exports.onPostBuild = async function(
     }
 
     if (useTempIndex) {
-      setStatus(activity, `query ${i}: moving copied index to main index`);
+      activity.report(`query ${i}: moving copied index to main index`);
       return moveIndex(client, indexToUse, index);
     }
   });
@@ -157,7 +157,7 @@ exports.onPostBuild = async function(
         const isRemoved = Object.keys(state.toRemove);
 
         if (isRemoved.length) {
-          setStatus(activity, `deleting ${isRemoved.length} object from ${indexName} index`);
+          activity.report(`deleting ${isRemoved.length} object from ${indexName} index`);
           const { taskID } = await state.index.deleteObjects(isRemoved);
           return state.index.waitTask(taskID);
         }
@@ -166,7 +166,7 @@ exports.onPostBuild = async function(
       await Promise.all(cleanup);
     }
   } catch (err) {
-    report.panic(`failed to index to Algolia`, err);
+    activity.error(`failed to index to Algolia`, err);
   }
   activity.end();
 };
@@ -213,19 +213,5 @@ async function indexExists(index) {
     return nbHits > 0;
   } catch (e) {
     return false;
-  }
-}
-
-/**
- * Hotfix the Gatsby reporter to allow setting status (not supported everywhere)
- *
- * @param {Object} activity reporter
- * @param {String} status status to report
- */
-function setStatus(activity, status) {
-  if (activity && activity.setStatus) {
-    activity.setStatus(status);
-  } else {
-    console.log('Algolia:', status);
   }
 }
