@@ -118,7 +118,7 @@ exports.onPostBuild = async function(
           return !!matchFields.find(field => extObj[field] !== curObj[field]);
         });
 
-        Object.keys(algoliaObjects).forEach(({ objectID }) => currentIndexState.toRemove[objectID] = true)
+        Object.keys(algoliaObjects).forEach(objectID => currentIndexState.toRemove[objectID] = true)
       }
 
       activity.report(`query ${i}: Partial updates – [insert/update: ${hasChanged.length}, total: ${objects.length}]`);
