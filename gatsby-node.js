@@ -60,7 +60,7 @@ exports.onPostBuild = async function(
       );
     }
 
-    const index = client.initIndex(indexName);
+    const index = indexState[indexName] ? indexState[indexName].index : client.initIndex(indexName);
     /* Use temp index if main index already exists */
     let useTempIndex = false
     const indexToUse = await (async function(_index) {
@@ -75,7 +75,7 @@ exports.onPostBuild = async function(
     /* Use to keep track of what to remove afterwards */
     if (!indexState[indexName]) indexState[indexName] = {
       index,
-      toRemove: {}
+      checked: {}
     }
     const currentIndexState = indexState[indexName]
 
@@ -99,7 +99,7 @@ exports.onPostBuild = async function(
     if (enablePartialUpdates) {
       activity.report(`query ${i}: starting Partial updates`);
 
-      algoliaObjects = await fetchAlgoliaObjects(indexToUse, matchFields);
+      const algoliaObjects = currentIndexState.algoliaObjects = currentIndexState.algoliaObjects ? currentIndexState.algoliaObjects : await fetchAlgoliaObjects(indexToUse, matchFields);
 
       const results = Object.keys(algoliaObjects).length
       activity.report(`query ${i}: found ${results} existing records`);
@@ -107,18 +107,15 @@ exports.onPostBuild = async function(
       if (results) {
         hasChanged = objects.filter(curObj => {
           const ID = curObj.objectID
-          let extObj = algoliaObjects[ID]
+          const extObj = currentIndexState.checked[ID] = currentIndexState.checked[ID] || algoliaObjects[ID]
 
           /* The object exists so we don't need to remove it from Algolia */
           delete(algoliaObjects[ID]);
-          delete(currentIndexState.toRemove[ID])
 
           if (!extObj) return true;
 
           return !!matchFields.find(field => extObj[field] !== curObj[field]);
         });
-
-        Object.keys(algoliaObjects).forEach(objectID => currentIndexState.toRemove[objectID] = true)
       }
 
       activity.report(`query ${i}: Partial updates – [insert/update: ${hasChanged.length}, total: ${objects.length}]`);
@@ -154,11 +151,11 @@ exports.onPostBuild = async function(
       /* This allows multiple queries to overlap */
       const cleanup = Object.keys(indexState).map(async function(indexName) {
         const state = indexState[indexName];
-        const isRemoved = Object.keys(state.toRemove);
+        const toRemove = Object.keys(state.algoliaObjects);
 
-        if (isRemoved.length) {
-          activity.report(`deleting ${isRemoved.length} object from ${indexName} index`);
-          const { taskID } = await state.index.deleteObjects(isRemoved);
+        if (toRemove.length) {
+          activity.report(`deleting ${toRemove.length} object from ${indexName} index`);
+          const { taskID } = await state.index.deleteObjects(toRemove);
           return state.index.waitTask(taskID);
         }
       })
