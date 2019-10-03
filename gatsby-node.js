@@ -9,6 +9,8 @@ const Activity = require('./activity');
  */
 const identity = obj => obj;
 
+const indexState = {}
+
 /**
  * Fetches all records for the current index from Algolia
  *
@@ -17,6 +19,10 @@ const identity = obj => obj;
  */
 function fetchAlgoliaObjects(index, attributesToRetrieve = ['modified']) {
   return new Promise((resolve, reject) => {
+    /* Check if we havn't already fetched this index */
+    const state = indexState[index.indexName]
+    if (state && state.hits) return resolve(state.hits)
+
     const browser = index.browseAll('', { attributesToRetrieve });
     const hits = {};
 
@@ -32,6 +38,17 @@ function fetchAlgoliaObjects(index, attributesToRetrieve = ['modified']) {
   });
 }
 
+async function getAlgoliaObjects(state, indexToUse, matchFields) {
+  if (state.algoliaObjects) return state.algoliaObjects
+  if (state._fetchingAlgoliaObjects) return state._fetchingAlgoliaObjects
+  else {
+    state._fetchingAlgoliaObjects = fetchAlgoliaObjects(indexToUse, matchFields)
+    state.algoliaObjects = await state._fetchingAlgoliaObjects
+    delete(state._fetchingAlgoliaObjects)
+    return state.algoliaObjects
+  }
+}
+
 exports.onPostBuild = async function(
   { graphql },
   { appId, apiKey, queries, indexName: mainIndexName, chunkSize = 1000, enablePartialUpdates = false, matchFields: mainMatchFields = ['modified'] }
@@ -42,8 +59,6 @@ exports.onPostBuild = async function(
   const client = algoliasearch(appId, apiKey);
 
   activity.report(`${queries.length} queries to index`);
-
-  const indexState = {}
 
   const jobs = queries.map(async function doQuery(
     { indexName = mainIndexName, query, transformer = identity, settings, matchFields = mainMatchFields },
@@ -60,7 +75,14 @@ exports.onPostBuild = async function(
       );
     }
 
-    const index = indexState[indexName] ? indexState[indexName].index : client.initIndex(indexName);
+    /* Use to keep track of what to remove afterwards */
+    if (!indexState[indexName]) indexState[indexName] = {
+      index: client.initIndex(indexName),
+      checked: {}
+    }
+    const currentIndexState = indexState[indexName]
+
+    const { index } = currentIndexState;
     /* Use temp index if main index already exists */
     let useTempIndex = false
     const indexToUse = await (async function(_index) {
@@ -71,13 +93,6 @@ exports.onPostBuild = async function(
       }
       return _index
     })(index)
-
-    /* Use to keep track of what to remove afterwards */
-    if (!indexState[indexName]) indexState[indexName] = {
-      index,
-      checked: {}
-    }
-    const currentIndexState = indexState[indexName]
 
     activity.report(`query ${i}: executing query`);
     const result = await graphql(query);
@@ -95,11 +110,10 @@ exports.onPostBuild = async function(
     activity.report(`query ${i}: graphql resulted in ${Object.keys(objects).length} records`);
 
     let hasChanged = objects;
-    let algoliaObjects = {}
     if (enablePartialUpdates) {
       activity.report(`query ${i}: starting Partial updates`);
 
-      const algoliaObjects = currentIndexState.algoliaObjects = currentIndexState.algoliaObjects ? currentIndexState.algoliaObjects : await fetchAlgoliaObjects(indexToUse, matchFields);
+      const algoliaObjects = await getAlgoliaObjects(currentIndexState, indexToUse, matchFields);
 
       const results = Object.keys(algoliaObjects).length
       activity.report(`query ${i}: found ${results} existing records`);
@@ -150,13 +164,14 @@ exports.onPostBuild = async function(
       /* Execute once per index */
       /* This allows multiple queries to overlap */
       const cleanup = Object.keys(indexState).map(async function(indexName) {
-        const state = indexState[indexName];
-        const toRemove = Object.keys(state.algoliaObjects);
+        const { index, algoliaObjects } = indexState[indexName];
+        if (!algoliaObjects) return
+        const toRemove = Object.keys(algoliaObjects);
 
         if (toRemove.length) {
           activity.report(`deleting ${toRemove.length} object from ${indexName} index`);
-          const { taskID } = await state.index.deleteObjects(toRemove);
-          return state.index.waitTask(taskID);
+          const { taskID } = await index.deleteObjects(toRemove);
+          return index.waitTask(taskID);
         }
       })
 
